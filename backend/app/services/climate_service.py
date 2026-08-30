@@ -23,6 +23,11 @@ class ClimateService:
     @staticmethod
     def get_provider() -> ClimateProvider:
         if settings.CLIMATE_PROVIDER.lower() == "fortyguard":
+            if not settings.FORTYGUARD_API_KEY:
+                logger.warning(
+                    "FORTYGUARD_API_KEY is not configured; falling back to mock climate provider."
+                )
+                return MockClimateProvider()
             return FortyGuardProvider()
         return MockClimateProvider()
 

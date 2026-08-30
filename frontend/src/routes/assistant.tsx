@@ -12,6 +12,43 @@ import { api, type ChatMessage, type ChatResponse } from "@/lib/api";
 import { useSelectedEvent } from "@/lib/useSelectedEvent";
 import { cn } from "@/lib/utils";
 
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/\"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+function formatChatText(content: string): string {
+  const escaped = escapeHtml(content);
+  const lines = escaped.split(/\n/).map((line) => line.trimEnd());
+
+  return lines
+    .map((line) => {
+      const normalized = line.trim();
+      if (!normalized) return "<br />";
+
+      if (/^#{1,6}\s+/.test(normalized)) {
+        return `<div class="font-semibold">${normalized.replace(/^#{1,6}\s+/, "")}</div>`;
+      }
+
+      if (/^[-*]\s+/.test(normalized)) {
+        return `<div class="flex items-start gap-2"><span class="mt-1 text-xs">•</span><span>${normalized.replace(/^[-*]\s+/, "")}</span></div>`;
+      }
+
+      let formatted = normalized
+        .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+        .replace(/\*(.+?)\*/g, "<em>$1</em>")
+        .replace(/`([^`]+)`/g, "<code class=\"rounded bg-black/5 px-1 py-0.5 text-[0.8em]\">$1</code>")
+        .replace(/\[(.+?)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noreferrer" class="underline underline-offset-2">$1</a>');
+
+      return `<div>${formatted}</div>`;
+    })
+    .join("");
+}
+
 export const Route = createFileRoute("/assistant")({
   validateSearch: (search: Record<string, unknown>) => ({
     event_id: typeof search['event_id'] === "string" ? (search['event_id'] as string) : undefined,
@@ -85,13 +122,18 @@ function AssistantPage() {
                 <div key={i} className={cn("flex", m.role === "user" ? "justify-end" : "justify-start")}>
                   <div
                     className={cn(
-                      "max-w-[85%] whitespace-pre-wrap rounded-2xl px-4 py-2.5 text-sm",
+                      "max-w-[85%] rounded-2xl px-4 py-2.5 text-sm",
                       m.role === "user"
                         ? "bg-primary text-primary-foreground"
                         : "bg-muted text-foreground",
                     )}
+                    dangerouslySetInnerHTML={
+                      m.role === "assistant"
+                        ? { __html: formatChatText(m.content) }
+                        : undefined
+                    }
                   >
-                    {m.content}
+                    {m.role === "user" ? m.content : null}
                   </div>
                 </div>
               ))

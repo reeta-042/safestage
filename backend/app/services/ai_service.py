@@ -344,16 +344,54 @@ class AIService:
     # ═══════════════════════════════════════════════════════════════════════
 
     @classmethod
+    @staticmethod
+    def _fallback_response(prompt: str, system_instruction: str, is_json: bool = False) -> str:
+        """Return a local, deterministic response when an AI key is not configured."""
+        prompt_lower = prompt.lower()
+        event_name = "this event"
+        match = re.search(r"Event:\s*([^\n]+)", prompt)
+        if match:
+            event_name = match.group(1).strip()
+
+        if is_json:
+            if "scenario_a" in prompt_lower or "recommended" in prompt_lower:
+                return (
+                    '{'
+                    '"scenario_a":{"name":"Scenario A","readiness_score":72.0,"heat_risk_level":"Moderate","avg_temp_c":33.0,"max_temp_c":36.0,"peak_heat_exposure_hours":2.0,"risk_factors":["Afternoon heat exposure","Limited shade coverage"],"mitigations":["Add shade and hydration","Move high-attendance activities earlier"]},'
+                    '"scenario_b":{"name":"Scenario B","readiness_score":84.0,"heat_risk_level":"Low","avg_temp_c":29.0,"max_temp_c":31.0,"peak_heat_exposure_hours":1.0,"risk_factors":["Evening crowding risk"],"mitigations":["Schedule late-day operations carefully","Increase water stations"]},'
+                    '"recommended":"scenario_b","score_difference":12.0,"reason":"The AI model is not configured in this environment, so this fallback recommendation prioritizes cooler time windows and stronger shade/hydration controls.",'
+                    '"tactical_action_plan":["Move peak attendance to the coolest part of the day.","Add shade and cooling stations near the queue and seating area.","Increase water access and messaging to attendees."],'
+                    '"ai_simulation_insights":"Live model access is unavailable. Use this fallback as a planning placeholder until AI_API_KEY is configured."'
+                    '}'
+                )
+
+            return (
+                '{'
+                '"summary":"AI analysis is currently running in demo mode because no AI_API_KEY is configured.",'
+                '"risk_assessment":"Use the event climate data as a planning guide and prioritize shade, hydration, and schedule changes.",'
+                '"recommendations":[{"action":"Add AI_API_KEY and rerun the analysis","reason":"This environment does not have a live AI provider configured.","priority":"high"},{"action":"Shift heat-exposed activities earlier in the day","reason":"Reducing peak sun exposure lowers attendee heat risk.","priority":"high"},{"action":"Increase shade and cooling infrastructure","reason":"Protect queues, seating, and vendor areas from direct radiant heat.","priority":"medium"}],'
+                '"schedule_advice":"Keep concentrated attendee activity before the hottest part of the day and use shade/hydration strategies for any remaining exposure.",'
+                '"confidence":"low",'
+                '"limitations":["AI_API_KEY is not configured in this environment."]'
+                '}'
+            )
+
+        return (
+            f"AI is running in local fallback mode because no AI_API_KEY is configured for {event_name}. "
+            "Use the event climate data to move the hottest activities earlier, increase shade and cooling, "
+            "place hydration stations near queues and seating, and keep attendee flow out of the most exposed areas. "
+            "Add AI_API_KEY in the deployment environment to enable live AI recommendations."
+        )
+
+    @classmethod
     async def _call_llm(cls, prompt: str, system_instruction: str, is_json: bool = False) -> str:
         """
         Call LLM (Groq / OpenAI-compatible or Google GenAI). Returns the response text.
-        Raises AIServiceError if the call fails — NEVER returns a hardcoded answer.
+        If the AI key is missing, use a local deterministic fallback so the app still works in demo/deployed environments.
         """
         if not settings.AI_API_KEY:
-            raise AIServiceError(
-                message="AI service is not configured.",
-                detail="Set AI_API_KEY in your .env file."
-            )
+            logger.warning("AI_API_KEY is not configured; using local fallback response.")
+            return cls._fallback_response(prompt, system_instruction, is_json=is_json)
 
         is_openai_compatible = (
             "groq.com" in settings.AI_BASE_URL or
