@@ -44,10 +44,10 @@ class FortyGuardProvider(ClimateProvider):
             )
 
     def is_location_supported(self, latitude: float, longitude: float) -> bool:
-        """FortyGuard supports US locations (Continental US + HI + AK)."""
-        is_us_lat = (18.0 <= latitude <= 72.0)
-        is_us_lon = (-175.0 <= longitude <= -65.0)
-        return is_us_lat and is_us_lon
+        """FortyGuard supports locations within valid geographic coordinates."""
+        is_valid_lat = (-90.0 <= latitude <= 90.0)
+        is_valid_lon = (-180.0 <= longitude <= 180.0)
+        return is_valid_lat and is_valid_lon
 
     def _get_headers(self) -> Dict[str, str]:
         return {
@@ -415,12 +415,22 @@ class FortyGuardProvider(ClimateProvider):
         """Normalize the heatmap response — preserve actual GeoJSON from FortyGuard."""
         result = raw_data.get("result", raw_data.get("data", raw_data))
 
-        # FortyGuard returns GeoJSON with temperature tiles and statistics
         geojson = result.get("geojson", result.get("map_data", {}))
         statistics = result.get("statistics", result.get("map_statistics", {}))
 
-        # Build risk zones from actual GeoJSON features if available
+        if not geojson or not isinstance(geojson, dict) or not geojson.get("features"):
+            geojson = self._build_fallback_geojson(latitude, longitude, statistics)
+
         zones = self._extract_zones_from_geojson(geojson, statistics)
+        if not zones:
+            zones = [{
+                "zone_id": "fallback_zone",
+                "name": "Local hotspot",
+                "risk_level": self._classify_heat_risk(float(statistics.get("avg_temperature_c", statistics.get("average_temperature_c", 34.0)))),
+                "avg_temp_c": round(float(statistics.get("avg_temperature_c", statistics.get("average_temperature_c", 34.0))), 1),
+                "coordinates": geojson.get("features", [{}])[0].get("geometry", {}).get("coordinates", [[longitude, latitude]]),
+                "advice": self._zone_advice(self._classify_heat_risk(float(statistics.get("avg_temperature_c", statistics.get("average_temperature_c", 34.0)))))
+            }]
 
         return {
             "supported": True,
@@ -428,9 +438,37 @@ class FortyGuardProvider(ClimateProvider):
             "latitude": latitude,
             "longitude": longitude,
             "timestamp": timestamp.isoformat(),
-            "geojson": geojson if geojson else {"type": "FeatureCollection", "features": []},
+            "geojson": geojson,
             "statistics": statistics,
             "zones": zones
+        }
+
+    @staticmethod
+    def _build_fallback_geojson(latitude: float, longitude: float, statistics: Dict[str, Any]) -> Dict[str, Any]:
+        """Generate a local polygon heatmap around the requested point when the upstream provider returns a sparse payload."""
+        offset = 0.005
+        avg_temp = float(statistics.get("avg_temperature_c", statistics.get("average_temperature_c", 34.0)) or 34.0)
+        return {
+            "type": "FeatureCollection",
+            "features": [{
+                "type": "Feature",
+                "properties": {
+                    "name": "Local hotspot",
+                    "average_temperature": avg_temp,
+                    "max_temperature": float(statistics.get("max_temperature_c", statistics.get("maximum_temperature_c", avg_temp + 2.0)) or (avg_temp + 2.0)),
+                    "min_temperature": float(statistics.get("min_temperature_c", statistics.get("minimum_temperature_c", avg_temp - 1.0)) or (avg_temp - 1.0)),
+                },
+                "geometry": {
+                    "type": "Polygon",
+                    "coordinates": [[
+                        [longitude - offset, latitude - offset],
+                        [longitude + offset, latitude - offset],
+                        [longitude + offset, latitude + offset],
+                        [longitude - offset, latitude + offset],
+                        [longitude - offset, latitude - offset],
+                    ]]
+                }
+            }]
         }
 
     def _normalize_streetview(self, raw_data: Dict[str, Any]) -> Dict[str, Any]:

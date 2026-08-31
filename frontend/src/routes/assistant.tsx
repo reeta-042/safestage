@@ -111,19 +111,21 @@ function AssistantPage() {
 
       <Card className="mt-6 shadow-soft">
         <CardContent className="p-0">
-          <div className="max-h-[55vh] min-h-64 space-y-4 overflow-y-auto p-5">
+          <div className="max-h-[55vh] min-h-[22rem] space-y-4 overflow-y-auto p-4 sm:p-5">
             {history.length === 0 ? (
-              <p className="py-10 text-center text-sm text-muted-foreground">
-                {activeId
-                  ? "Ask about heat risk, scheduling, hydration planning or crowd safety for this event."
-                  : "Select an event to start the conversation."}
-              </p>
+              <div className="flex min-h-[18rem] items-center justify-center">
+                <p className="max-w-md text-center text-sm text-muted-foreground">
+                  {activeId
+                    ? "Ask about heat risk, scheduling, hydration planning or crowd safety for this event."
+                    : "Select an event to start the conversation."}
+                </p>
+              </div>
             ) : (
               history.map((m: ChatMessage, i: number) => (
                 <div key={i} className={cn("flex", m.role === "user" ? "justify-end" : "justify-start")}>
                   <div
                     className={cn(
-                      "max-w-[85%] rounded-2xl px-4 py-2.5 text-sm",
+                      "max-w-[85%] rounded-2xl px-4 py-3 text-sm shadow-sm",
                       m.role === "user"
                         ? "bg-primary text-primary-foreground"
                         : "bg-muted text-foreground",
@@ -141,7 +143,7 @@ function AssistantPage() {
             )}
             {chat.isPending ? (
               <div className="flex justify-start">
-                <div className="rounded-2xl bg-muted px-4 py-2.5 text-sm text-muted-foreground">Thinking…</div>
+                <div className="rounded-2xl bg-muted px-4 py-3 text-sm text-muted-foreground">Thinking…</div>
               </div>
             ) : null}
             <div ref={endRef} />
@@ -153,7 +155,7 @@ function AssistantPage() {
             </div>
           ) : null}
 
-          <div className="flex items-end gap-3 border-t border-border p-4">
+          <div className="flex flex-col gap-3 border-t border-border p-4 sm:flex-row sm:items-end">
             <Textarea
               value={input}
               onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setInput(e.target.value)}
@@ -168,7 +170,7 @@ function AssistantPage() {
               className="min-h-11 resize-none bg-card"
               rows={1}
             />
-            <Button onClick={send} disabled={!activeId || !input.trim() || chat.isPending}>
+            <Button onClick={send} disabled={!activeId || !input.trim() || chat.isPending} className="sm:self-end">
               <Send className="size-4" /> Send
             </Button>
           </div>

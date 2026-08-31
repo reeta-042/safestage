@@ -14,6 +14,40 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { api, type HeatmapResponse } from "@/lib/api";
 import { useSelectedEvent } from "@/lib/useSelectedEvent";
 
+function getPolygonPoints(geojson: unknown): Array<{ points: string; avgTemp: number; risk: string }> {
+  if (!geojson || typeof geojson !== "object" || !("features" in geojson)) return [];
+
+  const features = (geojson as { features?: Array<{ geometry?: { coordinates?: unknown[] }; properties?: Record<string, unknown> }> }).features ?? [];
+
+  return features.flatMap((feature, index) => {
+    if (!feature?.geometry || typeof feature.geometry !== "object") return [];
+
+    const rawCoords = feature.geometry.coordinates as unknown[] | undefined;
+    if (!rawCoords || !rawCoords.length) return [];
+
+    const coords = Array.isArray(rawCoords[0]) ? rawCoords[0] : rawCoords;
+    const points = coords
+      .filter((pair): pair is number[] => Array.isArray(pair) && pair.length >= 2)
+      .map(([lon, lat]) => `${((lon + 180) / 360) * 1000},${((90 - lat) / 180) * 1000}`)
+      .join(" ");
+
+    if (!points) return [];
+
+    const avgTemp = Number(
+      feature.properties?.average_temperature ??
+      feature.properties?.avg_temperature ??
+      feature.properties?.temperature_c ??
+      34
+    );
+
+    return [{
+      points,
+      avgTemp: Number.isFinite(avgTemp) ? avgTemp : 34,
+      risk: avgTemp >= 38 ? "High" : avgTemp >= 34 ? "Moderate" : "Low",
+    }];
+  });
+}
+
 export const Route = createFileRoute("/heatmap")({
   validateSearch: (search: Record<string, unknown>) => ({
     event_id: typeof search['event_id'] === "string" ? (search['event_id'] as string) : undefined,
@@ -126,25 +160,49 @@ function HeatmapPage() {
 
             <Card className="shadow-soft">
               <CardHeader className="pb-3">
-                <CardTitle className="text-base">Heat-risk zones</CardTitle>
+                <CardTitle className="text-base">Heat map preview</CardTitle>
               </CardHeader>
-              <CardContent>
-                {!data.zones?.length ? (
-                  <p className="text-sm text-muted-foreground">The backend returned no zones.</p>
-                ) : (
-                  <ul className="grid gap-3 md:grid-cols-2">
-                    {data.zones.map((zone) => (
-                      <li key={zone.zone_id} className="rounded-xl border border-border p-4">
-                        <div className="flex items-center justify-between gap-2">
-                          <p className="font-medium">{zone.name}</p>
-                          <RiskBadge level={zone.risk_level} />
+              <CardContent className="space-y-4">
+                <div className="overflow-hidden rounded-xl border border-border bg-muted/40">
+                  {(() => {
+                    const polygons = getPolygonPoints(data.geojson);
+                    if (!polygons.length) {
+                      return (
+                        <div className="flex min-h-52 items-center justify-center p-6 text-sm text-muted-foreground">
+                          No spatial heatmap polygons were returned for this request.
                         </div>
-                        <p className="mt-1 text-xs text-muted-foreground">Avg temp: {zone.avg_temp_c}°C</p>
-                        <p className="mt-2 text-sm">{zone.advice}</p>
-                      </li>
-                    ))}
-                  </ul>
-                )}
+                      );
+                    }
+
+                    return (
+                      <svg viewBox="0 0 1000 1000" className="h-80 w-full bg-[radial-gradient(circle_at_center,_rgba(168,85,247,0.08),_transparent_60%)]">
+                        <rect width="1000" height="1000" fill="transparent" />
+                        {polygons.map((polygon, idx) => (
+                          <polygon
+                            key={`${polygon.points}-${idx}`}
+                            points={polygon.points}
+                            fill={polygon.avgTemp >= 38 ? "rgba(239,68,68,0.45)" : polygon.avgTemp >= 34 ? "rgba(251,191,36,0.45)" : "rgba(34,197,94,0.35)"}
+                            stroke={polygon.avgTemp >= 38 ? "#ef4444" : polygon.avgTemp >= 34 ? "#f59e0b" : "#22c55e"}
+                            strokeWidth="2"
+                          />
+                        ))}
+                        <circle cx="500" cy="500" r="8" fill="#7c3aed" opacity="0.9" />
+                      </svg>
+                    );
+                  })()}
+                </div>
+                <div className="grid gap-3 md:grid-cols-2">
+                  {data.zones?.length ? data.zones.map((zone) => (
+                    <div key={zone.zone_id} className="rounded-xl border border-border bg-card p-4">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="font-medium">{zone.name}</p>
+                        <RiskBadge level={zone.risk_level} />
+                      </div>
+                      <p className="mt-2 text-sm text-muted-foreground">Avg temp: {zone.avg_temp_c}°C</p>
+                      <p className="mt-2 text-sm">{zone.advice}</p>
+                    </div>
+                  )) : <p className="text-sm text-muted-foreground">The backend returned no zones.</p>}
+                </div>
               </CardContent>
             </Card>
 

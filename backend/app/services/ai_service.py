@@ -16,6 +16,7 @@ RULES:
 import asyncio
 import json
 import logging
+import os
 import re
 from typing import Dict, Any, List, Optional
 
@@ -389,14 +390,18 @@ class AIService:
         Call LLM (Groq / OpenAI-compatible or Google GenAI). Returns the response text.
         If the AI key is missing, use a local deterministic fallback so the app still works in demo/deployed environments.
         """
-        if not settings.AI_API_KEY:
+        api_key = os.environ.get("AI_API_KEY") if "AI_API_KEY" in os.environ else settings.AI_API_KEY
+        base_url = os.getenv("AI_BASE_URL") or settings.AI_BASE_URL
+        model = os.getenv("AI_MODEL") or settings.AI_MODEL
+
+        if not api_key:
             logger.warning("AI_API_KEY is not configured; using local fallback response.")
             return cls._fallback_response(prompt, system_instruction, is_json=is_json)
 
         is_openai_compatible = (
-            "groq.com" in settings.AI_BASE_URL or
-            "openai" in settings.AI_BASE_URL or
-            settings.AI_API_KEY.startswith("gsk_")
+            "groq.com" in base_url or
+            "openai" in base_url or
+            (api_key.startswith("gsk_") if isinstance(api_key, str) else False)
         )
 
         if is_openai_compatible:
@@ -404,17 +409,17 @@ class AIService:
             return raw_result.replace("\u202f", " ").replace("\u00a0", " ").strip()
 
         # Try Google GenAI SDK first with retry on rate limit
-        if HAS_GOOGLE_GENAI and "googleapis.com" in settings.AI_BASE_URL:
+        if HAS_GOOGLE_GENAI and "googleapis.com" in base_url:
             for attempt in range(4):
                 try:
-                    client = genai.Client(api_key=settings.AI_API_KEY)
+                    client = genai.Client(api_key=api_key)
                     config = types.GenerateContentConfig(
                         temperature=0.3,
                         system_instruction=system_instruction
                     )
                     response = await asyncio.to_thread(
                         client.models.generate_content,
-                        model=settings.AI_MODEL,
+                        model=model,
                         contents=prompt,
                         config=config
                     )

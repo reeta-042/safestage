@@ -5,6 +5,7 @@ Propagates errors explicitly; never returns silent fallback data.
 """
 
 import logging
+import os
 from datetime import datetime
 from typing import Dict, Any
 
@@ -22,8 +23,11 @@ class ClimateService:
 
     @staticmethod
     def get_provider() -> ClimateProvider:
-        if settings.CLIMATE_PROVIDER.lower() == "fortyguard":
-            if not settings.FORTYGUARD_API_KEY:
+        provider_name = os.getenv("CLIMATE_PROVIDER", settings.CLIMATE_PROVIDER or "mock").lower()
+        api_key = os.environ.get("FORTYGUARD_API_KEY") if "FORTYGUARD_API_KEY" in os.environ else settings.FORTYGUARD_API_KEY
+
+        if provider_name == "fortyguard":
+            if not api_key:
                 logger.warning(
                     "FORTYGUARD_API_KEY is not configured; falling back to mock climate provider."
                 )

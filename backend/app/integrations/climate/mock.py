@@ -10,11 +10,10 @@ class MockClimateProvider(ClimateProvider):
     """
 
     def is_location_supported(self, latitude: float, longitude: float) -> bool:
-        # FortyGuard currently supports US locations only
-        # US Bounding box check (Continental US + HI + AK)
-        is_us_lat = (18.0 <= latitude <= 72.0)
-        is_us_lon = (-175.0 <= longitude <= -65.0)
-        return is_us_lat and is_us_lon
+        # Valid geographic coordinates check
+        is_valid_lat = (-90.0 <= latitude <= 90.0)
+        is_valid_lon = (-180.0 <= longitude <= 180.0)
+        return is_valid_lat and is_valid_lon
 
     async def get_temperature_intelligence(
         self,
@@ -33,7 +32,7 @@ class MockClimateProvider(ClimateProvider):
         # Peak heat usually around 15:00 (3 PM)
         hourly_series = []
         current_time = start_datetime
-        base_temp = 32.0 + (abs(latitude - 33.4) * -0.2)  # Baseline temp in Celsius
+        base_temp = max(18.0, 36.0 - (abs(latitude) * 0.22))  # Realistic baseline temp in Celsius
         
         temps = []
         heat_indices = []

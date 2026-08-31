@@ -31,8 +31,19 @@ async def get_heatmap(
     Can be queried either by event_id or explicit latitude/longitude coordinates.
     """
     if latitude is not None and longitude is not None:
-        lat = latitude
-        lon = longitude
+        try:
+            lat = float(latitude)
+            lon = float(longitude)
+        except (TypeError, ValueError):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Latitude and longitude must be numeric values."
+            )
+        if not (-90 <= lat <= 90 and -180 <= lon <= 180):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Latitude and longitude must be valid coordinates on Earth."
+            )
         ts = timestamp or datetime.now(timezone.utc)
         effective_event_id = None
     elif event_id:
@@ -42,8 +53,8 @@ async def get_heatmap(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Event '{event_id}' not found"
             )
-        lat = event.latitude
-        lon = event.longitude
+        lat = float(event.latitude)
+        lon = float(event.longitude)
         ts = timestamp or event.start_datetime
         effective_event_id = event.id
     else:
