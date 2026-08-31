@@ -30,7 +30,12 @@ async def get_heatmap(
     Retrieves high-resolution spatial temperature GeoJSON grid using FortyGuard.
     Can be queried either by event_id or explicit latitude/longitude coordinates.
     """
-    if event_id:
+    if latitude is not None and longitude is not None:
+        lat = latitude
+        lon = longitude
+        ts = timestamp or datetime.now(timezone.utc)
+        effective_event_id = None
+    elif event_id:
         event = EventService.get_event(db, event_id)
         if not event:
             raise HTTPException(
@@ -40,14 +45,11 @@ async def get_heatmap(
         lat = event.latitude
         lon = event.longitude
         ts = timestamp or event.start_datetime
-    elif latitude is not None and longitude is not None:
-        lat = latitude
-        lon = longitude
-        ts = timestamp or datetime.now(timezone.utc)
+        effective_event_id = event.id
     else:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Must provide either 'event_id' or both 'latitude' and 'longitude'."
+            detail="Must provide either both 'latitude' and 'longitude' or a valid 'event_id'."
         )
 
     try:
@@ -63,7 +65,7 @@ async def get_heatmap(
         return HeatmapResponse(
             supported=False,
             message=res.get("message", "Hyperlocal climate intelligence is currently unavailable for this location."),
-            event_id=event_id,
+            event_id=effective_event_id,
             latitude=lat,
             longitude=lon,
             timestamp=ts.isoformat(),
@@ -75,7 +77,7 @@ async def get_heatmap(
     return HeatmapResponse(
         supported=True,
         message="FortyGuard spatial heat map retrieved successfully.",
-        event_id=event_id,
+        event_id=effective_event_id,
         latitude=lat,
         longitude=lon,
         timestamp=ts.isoformat(),

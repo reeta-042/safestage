@@ -13,6 +13,7 @@ from app.database.models import HeatAnalysis
 from app.schemas.chat import ChatRequest, ChatResponse
 from app.services.event_service import EventService
 from app.services.ai_service import AIService
+from app.services.climate_service import ClimateService
 from app.core.errors import AIServiceError, raise_safestage_error
 
 router = APIRouter(prefix="/chat", tags=["AI Copilot Chat"])
@@ -39,7 +40,6 @@ async def chat_copilot(req: ChatRequest, db: Session = Depends(get_db)):
         .first()
     )
 
-    # Build context from ACTUAL data — no fake defaults
     context = {
         "event_id": event.id,
         "event_name": event.name,
@@ -68,6 +68,21 @@ async def chat_copilot(req: ChatRequest, db: Session = Depends(get_db)):
             if snapshot:
                 context["ai_explanation"] = snapshot.get("ai_explanation")
                 context["recommendations"] = snapshot.get("recommendations", [])
+    else:
+        try:
+            climate_res = await ClimateService.get_temperature_intelligence(
+                latitude=event.latitude,
+                longitude=event.longitude,
+                start_datetime=event.start_datetime,
+                end_datetime=event.end_datetime,
+            )
+            if climate_res.get("supported"):
+                context["has_analysis"] = True
+                context["temperature_summary"] = climate_res.get("summary", {})
+                context["heat_risk_level"] = climate_res.get("summary", {}).get("heat_risk_level")
+                context["heat_risk_summary"] = climate_res.get("summary", {})
+        except Exception:
+            context["has_analysis"] = False
 
     history_list = [{"role": h.role, "content": h.content} for h in req.history] if req.history else []
 

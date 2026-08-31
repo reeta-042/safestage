@@ -549,7 +549,8 @@ class FortyGuardProvider(ClimateProvider):
     def _extract_zones_from_geojson(geojson: Dict, statistics: Dict) -> list:
         """
         Build risk zones from FortyGuard GeoJSON features.
-        Each feature is a temperature tile that we classify by risk level.
+        FortyGuard returns temperature values under keys like average_temperature / max_temperature /
+        min_temperature, not always temperature_c, so we normalize those variants here.
         """
         if not geojson or not isinstance(geojson, dict):
             return []
@@ -562,25 +563,36 @@ class FortyGuardProvider(ClimateProvider):
         for idx, feature in enumerate(features[:20]):  # Limit to prevent oversized responses
             props = feature.get("properties", {})
             geometry = feature.get("geometry", {})
-            temp = props.get("temperature_c", props.get("temperature", props.get("value")))
 
-            if temp is not None:
-                try:
-                    temp = float(temp)
-                except (TypeError, ValueError):
-                    continue
+            temp = (
+                props.get("temperature_c")
+                or props.get("temperature")
+                or props.get("value")
+                or props.get("average_temperature")
+                or props.get("avg_temperature")
+                or props.get("max_temperature")
+                or props.get("min_temperature")
+            )
 
-                risk = FortyGuardProvider._classify_heat_risk(temp)
-                coords = geometry.get("coordinates", [])
+            if temp is None:
+                continue
 
-                zones.append({
-                    "zone_id": f"fg_zone_{idx + 1}",
-                    "name": props.get("name", f"Zone {idx + 1}"),
-                    "risk_level": risk,
-                    "avg_temp_c": round(temp, 1),
-                    "coordinates": coords[0] if coords and isinstance(coords[0], list) else coords,
-                    "advice": FortyGuardProvider._zone_advice(risk)
-                })
+            try:
+                temp = float(temp)
+            except (TypeError, ValueError):
+                continue
+
+            risk = FortyGuardProvider._classify_heat_risk(temp)
+            coords = geometry.get("coordinates", [])
+
+            zones.append({
+                "zone_id": f"fg_zone_{idx + 1}",
+                "name": props.get("name", f"Zone {idx + 1}"),
+                "risk_level": risk,
+                "avg_temp_c": round(temp, 1),
+                "coordinates": coords[0] if coords and isinstance(coords[0], list) else coords,
+                "advice": FortyGuardProvider._zone_advice(risk)
+            })
 
         return zones
 

@@ -82,9 +82,10 @@ function AssistantPage() {
   }, [history]);
 
   const chat = useMutation<ChatResponse, unknown, { message: string; history: ChatMessage[] }>({
-    mutationFn: ({ message, history: h }) => api.chat({ event_id: activeId, message, history: h }),
-    onSuccess: (res) => {
-      setHistory((prev) => [...prev, { role: "assistant", content: res.reply }]);
+    mutationFn: async ({ message, history: h }: { message: string; history: ChatMessage[] }) =>
+      api.chat({ event_id: activeId as string, message, history: h }),
+    onSuccess: (res: ChatResponse) => {
+      setHistory((prev: ChatMessage[]) => [...prev, { role: "assistant", content: res.reply }]);
     },
   });
 
@@ -92,7 +93,7 @@ function AssistantPage() {
     const message = input.trim();
     if (!message || !activeId) return;
     const priorHistory = history;
-    setHistory((prev) => [...prev, { role: "user", content: message }]);
+    setHistory((prev: ChatMessage[]) => [...prev, { role: "user", content: message }]);
     setInput("");
     chat.mutate({ message, history: priorHistory });
   };
@@ -118,7 +119,7 @@ function AssistantPage() {
                   : "Select an event to start the conversation."}
               </p>
             ) : (
-              history.map((m, i) => (
+              history.map((m: ChatMessage, i: number) => (
                 <div key={i} className={cn("flex", m.role === "user" ? "justify-end" : "justify-start")}>
                   <div
                     className={cn(
@@ -155,8 +156,8 @@ function AssistantPage() {
           <div className="flex items-end gap-3 border-t border-border p-4">
             <Textarea
               value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => {
+              onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setInput(e.target.value)}
+              onKeyDown={(e: React.KeyboardEvent<HTMLTextAreaElement>) => {
                 if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault();
                   send();
