@@ -585,11 +585,7 @@ class FortyGuardProvider(ClimateProvider):
 
     @staticmethod
     def _extract_zones_from_geojson(geojson: Dict, statistics: Dict) -> list:
-        """
-        Build risk zones from FortyGuard GeoJSON features.
-        FortyGuard returns temperature values under keys like average_temperature / max_temperature /
-        min_temperature, not always temperature_c, so we normalize those variants here.
-        """
+        """Build risk zones from FortyGuard GeoJSON features across a wide range of field names."""
         if not geojson or not isinstance(geojson, dict):
             return []
 
@@ -598,37 +594,51 @@ class FortyGuardProvider(ClimateProvider):
             return []
 
         zones = []
-        for idx, feature in enumerate(features[:20]):  # Limit to prevent oversized responses
-            props = feature.get("properties", {})
-            geometry = feature.get("geometry", {})
+        for idx, feature in enumerate(features[:20]):
+            props = feature.get("properties", {}) if isinstance(feature, dict) else {}
+            geometry = feature.get("geometry", {}) if isinstance(feature, dict) else {}
 
-            temp = (
-                props.get("temperature_c")
-                or props.get("temperature")
-                or props.get("value")
-                or props.get("average_temperature")
-                or props.get("avg_temperature")
-                or props.get("max_temperature")
-                or props.get("min_temperature")
-            )
+            candidate_values = []
+            for key in [
+                "average_temperature", "avg_temp", "temp_c", "temperature_c", "temperature",
+                "temp", "air_temperature", "heat_index", "land_surface_temperature",
+                "value", "mean_temperature", "min_temperature", "max_temperature"
+            ]:
+                if key in props:
+                    candidate_values.append(props.get(key))
+
+            nested = props.get("thermal") if isinstance(props.get("thermal"), dict) else {}
+            if isinstance(nested, dict):
+                for key in ["avg_temp", "temperature_c", "temperature", "heat_index", "value"]:
+                    if key in nested:
+                        candidate_values.append(nested.get(key))
+
+            if not candidate_values:
+                for key in ["temperature", "avg_temp", "heat_index", "value"]:
+                    if isinstance(props.get("metrics"), dict) and key in props["metrics"]:
+                        candidate_values.append(props["metrics"][key])
+
+            temp = None
+            for value in candidate_values:
+                try:
+                    temp = float(value)
+                    break
+                except (TypeError, ValueError):
+                    continue
 
             if temp is None:
                 continue
 
-            try:
-                temp = float(temp)
-            except (TypeError, ValueError):
-                continue
-
             risk = FortyGuardProvider._classify_heat_risk(temp)
             coords = geometry.get("coordinates", [])
+            sector_name = props.get("name") or props.get("zone_name") or props.get("sector") or f"Sector {idx + 1}"
 
             zones.append({
                 "zone_id": f"fg_zone_{idx + 1}",
-                "name": props.get("name", f"Zone {idx + 1}"),
+                "name": str(sector_name),
                 "risk_level": risk,
                 "avg_temp_c": round(temp, 1),
-                "coordinates": coords[0] if coords and isinstance(coords[0], list) else coords,
+                "coordinates": coords[0] if isinstance(coords, list) and coords and isinstance(coords[0], list) else coords,
                 "advice": FortyGuardProvider._zone_advice(risk)
             })
 

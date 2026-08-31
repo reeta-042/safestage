@@ -22,9 +22,20 @@ logger = logging.getLogger(__name__)
 class ClimateService:
 
     @staticmethod
+    def _env_or_setting(name: str, default: Any = None) -> Any:
+        value = os.getenv(name)
+        if value is not None and value != "":
+            return value
+        setting_value = getattr(settings, name, default)
+        if setting_value is not None and setting_value != "":
+            return setting_value
+        return default
+
+    @staticmethod
     def get_provider() -> ClimateProvider:
-        provider_name = os.getenv("CLIMATE_PROVIDER", settings.CLIMATE_PROVIDER or "mock").lower()
-        api_key = os.environ.get("FORTYGUARD_API_KEY") if "FORTYGUARD_API_KEY" in os.environ else settings.FORTYGUARD_API_KEY
+        env_provider = os.getenv("CLIMATE_PROVIDER")
+        provider_name = (env_provider if env_provider not in (None, "") else settings.CLIMATE_PROVIDER or "mock").lower()
+        api_key = ClimateService._env_or_setting("FORTYGUARD_API_KEY")
 
         if provider_name == "fortyguard":
             if not api_key:

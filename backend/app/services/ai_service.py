@@ -390,9 +390,15 @@ class AIService:
         Call LLM (Groq / OpenAI-compatible or Google GenAI). Returns the response text.
         If the AI key is missing, use a local deterministic fallback so the app still works in demo/deployed environments.
         """
-        api_key = os.environ.get("AI_API_KEY") if "AI_API_KEY" in os.environ else settings.AI_API_KEY
-        base_url = os.getenv("AI_BASE_URL") or settings.AI_BASE_URL
-        model = os.getenv("AI_MODEL") or settings.AI_MODEL
+        api_key = os.getenv("AI_API_KEY")
+        if api_key is None or api_key == "":
+            api_key = getattr(settings, "AI_API_KEY", None)
+        base_url = os.getenv("AI_BASE_URL") or getattr(settings, "AI_BASE_URL", "")
+        model = os.getenv("AI_MODEL") or getattr(settings, "AI_MODEL", "")
+        if not base_url:
+            base_url = settings.AI_BASE_URL
+        if not model:
+            model = settings.AI_MODEL
 
         if not api_key:
             logger.warning("AI_API_KEY is not configured; using local fallback response.")
@@ -470,13 +476,17 @@ class AIService:
         """Call Groq or OpenAI-compatible endpoint."""
         import httpx
 
-        url = f"{settings.AI_BASE_URL.rstrip('/')}/chat/completions"
+        base_url = os.getenv("AI_BASE_URL") or getattr(settings, "AI_BASE_URL", "https://api.groq.com/openai/v1")
+        api_key = os.getenv("AI_API_KEY") or getattr(settings, "AI_API_KEY", None)
+        model = os.getenv("AI_MODEL") or getattr(settings, "AI_MODEL", "openai/gpt-oss-120b")
+
+        url = f"{base_url.rstrip('/')}/chat/completions"
         headers = {
-            "Authorization": f"Bearer {settings.AI_API_KEY}",
+            "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json"
         }
         payload = {
-            "model": settings.AI_MODEL,
+            "model": model,
             "messages": [
                 {"role": "system", "content": system_instruction},
                 {"role": "user", "content": prompt}

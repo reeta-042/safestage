@@ -147,7 +147,11 @@ class MockClimateProvider(ClimateProvider):
                     "zone_id": f"zone_{idx+1}",
                     "name": name,
                     "temperature_c": zone_temp,
+                    "average_temperature": zone_temp,
+                    "max_temperature": round(zone_temp + 1.5, 1),
+                    "min_temperature": round(zone_temp - 1.0, 1),
                     "heat_risk": risk,
+                    "risk_level": risk,
                     "advice": advice
                 },
                 "geometry": {
